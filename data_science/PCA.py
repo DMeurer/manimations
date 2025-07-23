@@ -1,3 +1,4 @@
+import numpy as np
 from manim import *
 
 
@@ -20,14 +21,18 @@ class PCAAnimation(ThreeDScene):
 		# camera setup
 		# self.set_camera_orientation(phi=70 * DEGREES, theta=45 * DEGREES)
 		# self.begin_3dillusion_camera_rotation(rate=0.3)
+		# set camera to an orthographic view
+		self.set_camera_orientation(focal_distance=9999999999)
 
 		self.wait(1)
 
-		axes_2d = Axes(
+		axes_2d = ThreeDAxes(
 			x_range=[0, 5],
 			y_range=[0, 5],
+			z_range=[-1, 1],
 			x_length=5,
 			y_length=5,
+			z_length=2
 		)
 		axes_2d.shift(IN * 2)
 
@@ -67,7 +72,7 @@ class PCAAnimation(ThreeDScene):
 		centroid_label.next_to(centroid_dot, UP + LEFT)
 		self.play(Create(centroid_dot), Write(centroid_label))
 		self.wait(1)
-		
+
 		# draw horizontal line through the centroid
 		regression_line = Line3D(
 			start=centroid_dot.get_center() - np.array((3, 0, 0)),
@@ -76,16 +81,16 @@ class PCAAnimation(ThreeDScene):
 		)
 		self.play(GrowFromPoint(regression_line, centroid_dot.get_center()))
 		self.wait(1)
-		
+
 		# Create ValueTracker for the regression line angle
 		angle_tracker = ValueTracker(0)
-		
+
 		# calculate the actual regression line angle
 		# calculate the slope
 		slope = (centroid_dot.get_y() - points[0][1]) / (centroid_dot.get_x() - points[0][0])
 		# calculate the angle in radians
 		target_angle = np.arctan(slope)
-		
+
 		# draw thin dotted lines from each point to the horizontal line, indicating the distance
 		lines = []
 		for i, dot in enumerate(dots):
@@ -96,23 +101,23 @@ class PCAAnimation(ThreeDScene):
 				dash_length=0.2
 			)
 			lines.append(line)
-		
+
 		self.play(LaggedStart(*[GrowFromPoint(line, dot.get_center()) for line, dot in zip(lines, dots)], lag_ratio=0.1))
-		
+
 		# Create sum of distances text in top left corner
 		sum_text = Text("Sum of distances:", font_size=21, color=WHITE)
 		sum_text.to_corner(UL)
 		self.play(Write(sum_text))
-		
+
 		# Add updater to sum text to calculate current distances
 		def update_sum_text(mob):
 			current_distance = self.calculate_total_distance(dots, centroid_dot.get_center(), angle_tracker.get_value())
 			new_text = Text(f"Sum of distances: {current_distance:.2f}", font_size=21, color=WHITE)
 			new_text.to_corner(UL)
 			mob.become(new_text)
-		
+
 		sum_text.add_updater(update_sum_text)
-		
+
 		# Add updaters to each line to stay perpendicular to regression line
 		for i, (line, dot) in enumerate(zip(lines, dots)):
 			line.add_updater(
@@ -121,9 +126,9 @@ class PCAAnimation(ThreeDScene):
 					self.get_perpendicular_projection(dot.get_center(), centroid_dot.get_center(), angle_tracker.get_value())
 				)
 			)
-		
+
 		self.wait(1)
-		
+
 		# rotate the regression line and update angle tracker
 		self.play(
 			Rotate(regression_line, angle=target_angle, axis=OUT, about_point=centroid_dot.get_center()),
@@ -131,31 +136,49 @@ class PCAAnimation(ThreeDScene):
 			run_time=4
 		)
 		self.wait(1)
-		
-		# remove the lines
-		self.play(LaggedStart(*[FadeOut(line) for line in lines], lag_ratio=0.1))
+
 		# Remove the sum text
 		sum_text.clear_updaters()
 		self.remove(sum_text)
 		self.wait(1)
 
 		# create a new coordinate system with the regression line as the x-axis, this time 3D
-		axes_3d = ThreeDAxes(
-			x_range=[-5, 5],
-			y_range=[-5, 5],
-			z_range=[-5, 5],
-			x_length=11,
-			y_length=11,
-			z_length=11,
-		)
+		axes_3d = axes_2d.copy()
+
+		# Doesnt work, using updaters instead
+		# axes_3d.set(x_range=[-4, 4])
+		# axes_3d.set(y_range=[-4, 4])
+		# axes_3d.set(z_range=[-4, 4])
+		# axes_3d.set(x_length=8)
+		# axes_3d.set(y_length=8)
+		# axes_3d.set(z_length=8)
+		
+		axes_3d.add_updater(lambda mob: mob.set(
+			x_range=[-4, 4],
+			y_range=[-4, 4],
+			z_range=[-4, 4],
+			x_length=8,
+			y_length=8,
+			z_length=8
+		))
+		
+		axes_3d.update()
+
+
 		# center of the axes to the centroid
-		axes_3d.move_to(centroid_dot.get_center())
+		axes_3d.move_to(centroid_dot.get_center()-(axes_3d.c2p(0,0,0)-axes_3d.get_center()))
 		axes_3d.rotate(angle_tracker.get_value(), axis=OUT, about_point=centroid_dot.get_center())
-		
-		self.play(Create(axes_3d), play_time=2)
-		self.play(FadeOut(regression_line))
+
+		for line in lines:
+			line.clear_updaters()
+		self.play(
+			Create(axes_3d),
+			FadeOut(regression_line),
+			Create(Dot3D(axes_3d.get_center(), color=WHITE, radius=0.1)),
+			run_time=2
+		)
 		self.play(FadeOut(axes_2d))
-		
+
 		# move to make the centroid the center of the camera
 		self.move_camera(
 			theta=angle_tracker.get_value()-0.5*PI,
@@ -163,33 +186,26 @@ class PCAAnimation(ThreeDScene):
 			run_time=1.5
 		)
 		self.wait(1)
-		
-		# redraw lines from each point to the regression line
-		# remove the previous lines
-		for line in lines:
-			line.clear_updaters()
-		self.remove(
-			*lines
-		)
-		self.play(
-			LaggedStart(*[GrowFromPoint(line, dot.get_center()) for line, dot in zip(lines, dots)], lag_ratio=0.1),
-			run_time=2
-		)
-		
+
 		# move Dots XY to the regression line, where the dotted lines end
+		moves = []
 		for i, (line, dot) in enumerate(zip(lines, dots)):
 			intersection_point = self.get_perpendicular_projection(dot.get_center(), centroid_dot.get_center(), angle_tracker.get_value())
-			projection_point = np.array((intersection_point[0], intersection_point[1], dot.get_z()))
-			self.play(dot.animate.move_to(projection_point), run_time=0.5)
-		
+			projection_point = np.array((intersection_point[0], intersection_point[1], points[i][2]))
+			moves.append(dot.animate.move_to(projection_point))
+		self.play(
+			LaggedStart(*moves, lag_ratio=0.2),
+			LaggedStart(FadeOut(*lines), lag_ratio=0.2)
+		)
+
 		self.wait(1)
 
 		self.move_camera(
-			phi=PI,
+			phi=PI*0.5,
 			theta=angle_tracker.get_value()-0.5*PI,
 			frame_center=centroid_dot.get_center(),
-			run_time=1
+			run_time=4
 		)
-		
+
 		self.wait(3)
 	
