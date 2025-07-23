@@ -2,6 +2,20 @@ from manim import *
 
 
 class PCAAnimation(ThreeDScene):
+	def get_perpendicular_projection(self, dot_pos, centroid_pos, angle):
+		regression_direction = np.array([np.cos(angle), np.sin(angle), 0])
+		centroid_to_dot = dot_pos - centroid_pos
+		projection_length = np.dot(centroid_to_dot, regression_direction)
+		return centroid_pos + projection_length * regression_direction
+
+	def calculate_total_distance(self, dots, centroid_pos, angle):
+		total_distance = 0
+		for dot in dots:
+			dot_pos = dot.get_center()
+			projection_point = self.get_perpendicular_projection(dot_pos, centroid_pos, angle)
+			distance = np.linalg.norm(dot_pos - projection_point)
+			total_distance += distance
+		return total_distance
 	def construct(self):
 		# camera setup
 		# self.set_camera_orientation(phi=70 * DEGREES, theta=45 * DEGREES)
@@ -9,34 +23,33 @@ class PCAAnimation(ThreeDScene):
 
 		self.wait(1)
 
-		# 3D Axes
-		axes = Axes(
+		axes_2d = Axes(
 			x_range=[0, 5],
 			y_range=[0, 5],
 			x_length=5,
 			y_length=5,
 		)
-		axes.shift(IN * 2)
+		axes_2d.shift(IN * 2)
 
-		self.play(Create(axes))
+		self.play(Create(axes_2d))
 
 		# create random points between (0, 0, 0) and (5, 5, 5)
 		points = [
-			axes.c2p(1.1, 1.2, 2.3),
-			axes.c2p(1.6, 1.0, -0.8),
-			axes.c2p(1.0, 1.7, 2.8),
-			axes.c2p(1.8, 1.1, -0.2),
-			axes.c2p(1.3, 1.9, 2.1),
-			axes.c2p(1.9, 1.3, -0.9),
-			axes.c2p(1.2, 1.5, 2.9),
-			axes.c2p(3.2, 3.1, -0.3),
-			axes.c2p(3.9, 3.8, 2.2),
-			axes.c2p(3.1, 3.9, -0.7),
-			axes.c2p(3.8, 3.2, 2.7),
-			axes.c2p(3.3, 3.7, -0.1),
-			axes.c2p(3.9, 3.1, 2.4),
-			axes.c2p(3.2, 3.8, -0.8),
-			axes.c2p(3.7, 3.3, 2.6)
+			axes_2d.c2p(1.1, 1.2, 2.3),
+			axes_2d.c2p(1.6, 1.0, -0.8),
+			axes_2d.c2p(1.0, 1.7, 2.8),
+			axes_2d.c2p(1.8, 1.1, -0.2),
+			axes_2d.c2p(1.3, 1.9, 2.1),
+			axes_2d.c2p(1.9, 1.3, -0.9),
+			axes_2d.c2p(1.2, 1.5, 2.9),
+			axes_2d.c2p(3.2, 3.1, -0.3),
+			axes_2d.c2p(3.9, 3.8, 2.2),
+			axes_2d.c2p(3.1, 3.9, -0.7),
+			axes_2d.c2p(3.8, 3.2, 2.7),
+			axes_2d.c2p(3.3, 3.7, -0.1),
+			axes_2d.c2p(3.9, 3.1, 2.4),
+			axes_2d.c2p(3.2, 3.8, -0.8),
+			axes_2d.c2p(3.7, 3.3, 2.6)
 		]
 		dots = [Dot3D(point, color=BLUE) for point in points]
 
@@ -55,18 +68,27 @@ class PCAAnimation(ThreeDScene):
 		self.play(Create(centroid_dot), Write(centroid_label))
 		self.wait(1)
 		
-		# draw horizontal line from through the centroid
-		horizontal_line = Line3D(
+		# draw horizontal line through the centroid
+		regression_line = Line3D(
 			start=centroid_dot.get_center() - np.array((3, 0, 0)),
 			end=centroid_dot.get_center() + np.array((3, 0, 0)),
 			color=RED
 		)
-		self.play(GrowFromPoint(horizontal_line, centroid_dot.get_center()))
+		self.play(GrowFromPoint(regression_line, centroid_dot.get_center()))
 		self.wait(1)
+		
+		# Create ValueTracker for the regression line angle
+		angle_tracker = ValueTracker(0)
+		
+		# calculate the actual regression line angle
+		# calculate the slope
+		slope = (centroid_dot.get_y() - points[0][1]) / (centroid_dot.get_x() - points[0][0])
+		# calculate the angle in radians
+		target_angle = np.arctan(slope)
 		
 		# draw thin dotted lines from each point to the horizontal line, indicating the distance
 		lines = []
-		for dot in dots:
+		for i, dot in enumerate(dots):
 			line = DashedLine(
 				start=dot.get_center(),
 				end=np.array((dot.get_x(), centroid_dot.get_y(), dot.get_z())),
@@ -74,5 +96,100 @@ class PCAAnimation(ThreeDScene):
 				dash_length=0.2
 			)
 			lines.append(line)
+		
 		self.play(LaggedStart(*[GrowFromPoint(line, dot.get_center()) for line, dot in zip(lines, dots)], lag_ratio=0.1))
 		
+		# Create sum of distances text in top left corner
+		sum_text = Text("Sum of distances:", font_size=21, color=WHITE)
+		sum_text.to_corner(UL)
+		self.play(Write(sum_text))
+		
+		# Add updater to sum text to calculate current distances
+		def update_sum_text(mob):
+			current_distance = self.calculate_total_distance(dots, centroid_dot.get_center(), angle_tracker.get_value())
+			new_text = Text(f"Sum of distances: {current_distance:.2f}", font_size=21, color=WHITE)
+			new_text.to_corner(UL)
+			mob.become(new_text)
+		
+		sum_text.add_updater(update_sum_text)
+		
+		# Add updaters to each line to stay perpendicular to regression line
+		for i, (line, dot) in enumerate(zip(lines, dots)):
+			line.add_updater(
+				lambda mob, dot=dot: mob.put_start_and_end_on(
+					dot.get_center(),
+					self.get_perpendicular_projection(dot.get_center(), centroid_dot.get_center(), angle_tracker.get_value())
+				)
+			)
+		
+		self.wait(1)
+		
+		# rotate the regression line and update angle tracker
+		self.play(
+			Rotate(regression_line, angle=target_angle, axis=OUT, about_point=centroid_dot.get_center()),
+			angle_tracker.animate.set_value(target_angle),
+			run_time=4
+		)
+		self.wait(1)
+		
+		# remove the lines
+		self.play(LaggedStart(*[FadeOut(line) for line in lines], lag_ratio=0.1))
+		# Remove the sum text
+		sum_text.clear_updaters()
+		self.remove(sum_text)
+		self.wait(1)
+
+		# create a new coordinate system with the regression line as the x-axis, this time 3D
+		axes_3d = ThreeDAxes(
+			x_range=[-5, 5],
+			y_range=[-5, 5],
+			z_range=[-5, 5],
+			x_length=11,
+			y_length=11,
+			z_length=11,
+		)
+		# center of the axes to the centroid
+		axes_3d.move_to(centroid_dot.get_center())
+		axes_3d.rotate(angle_tracker.get_value(), axis=OUT, about_point=centroid_dot.get_center())
+		
+		self.play(Create(axes_3d), play_time=2)
+		self.play(FadeOut(regression_line))
+		self.play(FadeOut(axes_2d))
+		
+		# move to make the centroid the center of the camera
+		self.move_camera(
+			theta=angle_tracker.get_value()-0.5*PI,
+			frame_center=centroid_dot.get_center(),
+			run_time=1.5
+		)
+		self.wait(1)
+		
+		# redraw lines from each point to the regression line
+		# remove the previous lines
+		for line in lines:
+			line.clear_updaters()
+		self.remove(
+			*lines
+		)
+		self.play(
+			LaggedStart(*[GrowFromPoint(line, dot.get_center()) for line, dot in zip(lines, dots)], lag_ratio=0.1),
+			run_time=2
+		)
+		
+		# move Dots XY to the regression line, where the dotted lines end
+		for i, (line, dot) in enumerate(zip(lines, dots)):
+			intersection_point = self.get_perpendicular_projection(dot.get_center(), centroid_dot.get_center(), angle_tracker.get_value())
+			projection_point = np.array((intersection_point[0], intersection_point[1], dot.get_z()))
+			self.play(dot.animate.move_to(projection_point), run_time=0.5)
+		
+		self.wait(1)
+
+		self.move_camera(
+			phi=PI,
+			theta=angle_tracker.get_value()-0.5*PI,
+			frame_center=centroid_dot.get_center(),
+			run_time=1
+		)
+		
+		self.wait(3)
+	
