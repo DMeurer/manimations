@@ -96,7 +96,7 @@ class CenterPoint(ThreeDScene):
 		# Create turning point after vector reaches destination
 		self.play(Create(turning_point), Create(turning_label))
 		
-		# Copy the vector and move it to start at turning point
+		# Copy the vector
 		vector_copy = Arrow3D(
 			start=full_vector.get_start(),
 			end=full_vector.get_end(),
@@ -104,8 +104,24 @@ class CenterPoint(ThreeDScene):
 		)
 		
 		self.add(vector_copy)
+		
+		# Create angle marker to show perpendicular rotation
+		angle_marker = Elbow(
+			color=RED,
+			width=20,
+		)
+		# Position the arc at the rotation point (vector start) and orient it perpendicular to turn axis
+		angle_marker.set_points_as_corners([
+			vector_copy.get_start()+vector_copy.get_direction()*0.5,
+			vector_copy.get_start()+vector_copy.get_direction()*0.5+turn_axis.get_direction()*0.5,
+			turn_axis.get_direction()*0.5
+		])
+		# Rotate the arc to be perpendicular to the turning axis
+		
+		self.play(Create(angle_marker))
 		self.play(
 			Rotate(vector_copy, angle=135*DEGREES, axis=turn_axis.get_direction(), about_point=vector_copy.get_start()),
+			Rotate(angle_marker, angle=135*DEGREES, axis=turn_axis.get_direction(), about_point=vector_copy.get_start()),
 			run_time=2
 		)
 		self.play(

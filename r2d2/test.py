@@ -50,3 +50,39 @@ class Axis(ThreeDScene):
 			Create(z_point)
 		)
 		self.wait(5)
+
+
+class ElbowTest(ThreeDScene):
+	def construct(self):
+		# Set up the camera
+		# self.set_camera_orientation(phi=45 * DEGREES, theta=10 * DEGREES)
+		self.set_camera_orientation(phi=70 * DEGREES, theta=45 * DEGREES)
+
+		# Create 3D axes with colors matching the image
+		axes = ThreeDAxes(
+			x_range=[-5, 5, 1],
+			y_range=[-5, 5, 1],
+			z_range=[-2, 4, 1],
+			x_length=10,
+			y_length=10,
+			z_length=6,
+		)
+		self.play(Create(axes))
+		
+		elbow = Elbow(
+			color=YELLOW,
+			width=0.1
+		)
+		
+		elbow.set_points_as_corners([RIGHT, RIGHT+UP, UP])
+
+		self.play(
+			Create(elbow),
+			run_time=2
+		)
+		
+		self.play(
+			Rotate(elbow, angle=135*DEGREES, axis=np.array((0, 5, 10)), about_point=ORIGIN),
+		)
+		
+		self.wait(5)
